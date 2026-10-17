@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Visor desde la Tierra</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #05070d; }
+      body { font: 13px/1.45 system-ui, "Segoe UI", sans-serif; color: #e8ecf4; overflow: hidden; }
+      #wrap { display: flex; height: 100vh; }
+
+      #mapCol { flex: 1 1 60%; position: relative; min-width: 320px; }
+      #map { position: absolute; inset: 0; background: #0a0e16; }
+
+      #panel { flex: 0 0 420px; width: 420px; border-left: 1px solid rgba(255,255,255,0.08);
+        background: #0a0e16; overflow-y: auto; padding: 14px 16px; box-sizing: border-box; }
+
+      h1 { font-size: 13px; margin: 0 0 4px; letter-spacing: .06em; text-transform: uppercase; color: #9fb3d9; font-weight: 600; }
+      .sub { color: #6f7f9c; font-size: 11.5px; margin-bottom: 10px; }
+      a.back { color: #8fb0ff; text-decoration: none; font-size: 12px; }
+      a.back:hover { text-decoration: underline; }
+
+      .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+      .row + .row { margin-top: 6px; }
+      .grow { flex: 1; }
+      .sec { border-top: 1px solid rgba(255,255,255,0.08); margin-top: 12px; padding-top: 11px; }
+      .sec > .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: #8fa3c8; margin-bottom: 7px; }
+
+      button, select, input[type=datetime-local] {
+        background: #1b2334; color: #e8ecf4; border: 1px solid rgba(255,255,255,0.13);
+        border-radius: 6px; padding: 5px 8px; font: inherit; cursor: pointer;
+      }
+      button:hover { background: #27324a; }
+      button.on { background: #2f6df0; border-color: #5b8ff8; }
+      button.acc { background: #b8442c; border-color: #e0704f; }
+      button.mini { padding: 4px 6px; font-size: 12px; font-variant-numeric: tabular-nums; }
+      input[type=range] { width: 100%; accent-color: #2f6df0; }
+
+      .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; }
+      .kv + .kv { margin-top: 3px; }
+      .kv b { font-weight: 600; font-variant-numeric: tabular-nums; }
+      .dim { color: #93a3bf; }
+      .hot { color: #ff9a6b; }
+      .warn { color: #ffbe6b; }
+
+      #obsc { font-size: 26px; font-weight: 700; letter-spacing: .01em; }
+      #obsc.total { color: #ff8a5c; }
+      #obsc.partial { color: #ffd08a; }
+      #obsc.none { color: #7f92b5; }
+
+      .skyBox { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+      .skyCap { font-size: 11px; color: #6f7f9c; text-transform: uppercase; letter-spacing: .06em; margin: 2px 0 6px; text-align: center; }
+      canvas { display: block; margin: 0 auto; border-radius: 8px; }
+
+      .obs-marker { width: 16px; height: 16px; }
+      .obs-marker .dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        background: #2f6df0; border: 2px solid #eaf1ff;
+        box-shadow: 0 0 0 4px rgba(47,109,240,0.35), 0 2px 8px rgba(0,0,0,0.6);
+      }
+      .maplibregl-ctrl-attrib { background: rgba(0,0,0,0.5) !important; color: #8fa3c8 !important; font-size: 10px !important; }
+      .maplibregl-ctrl-attrib a { color: #9fb3d9 !important; }
+      .maplibregl-ctrl-group { background: #141a28 !important; border: 1px solid rgba(255,255,255,0.12) !important; }
+      .maplibregl-ctrl-group button { background: transparent !important; }
+      .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(0.82) hue-rotate(180deg); }
+      .maplibregl-ctrl button:disabled .maplibregl-ctrl-icon { opacity: 0.35; }
+      .map-hint {
+        position: absolute; left: 10px; bottom: 10px; z-index: 500; pointer-events: none;
+        background: rgba(8,10,16,0.72); border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 6px; padding: 4px 8px; font-size: 11.5px; color: #9fb3d9;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div id="mapCol">
+        <div id="map"></div>
+        <div class="map-hint">Clic: elegir punto · rueda: zoom · botón derecho: girar · Ctrl+arrastrar: inclinar</div>
+      </div>
+
+      <div id="panel">
+        <h1>Visor desde la Tierra</h1>
+        <a class="back" href="/">← Volver al visor Tierra · Luna · Eclipses</a>
+
+        <div class="sec">
+          <div class="lbl">Momento</div>
+          <div class="row">
+            <input id="date" type="datetime-local" step="1" class="grow" />
+            <button id="go">Ir</button>
+          </div>
+          <div class="row">
+            <button class="mini" data-jump="-3600">−1 h</button>
+            <button class="mini" data-jump="-600">−10 m</button>
+            <button class="mini" data-jump="-60">−1 m</button>
+            <button class="mini" data-jump="60">+1 m</button>
+            <button class="mini" data-jump="600">+10 m</button>
+            <button class="mini" data-jump="3600">+1 h</button>
+          </div>
+          <div class="row">
+            <button id="play" class="grow">▶ Reproducir</button>
+            <button id="dir">◀ Atrás</button>
+          </div>
+          <div class="row">
+            <input id="speed" type="range" min="0" max="100" step="1" value="45" />
+          </div>
+          <div class="row"><span class="dim" id="speedLabel">30 s/s</span></div>
+        </div>
+
+        <div class="sec">
+          <div class="lbl">Punto de observación</div>
+          <div class="kv"><span class="dim">Latitud</span><b id="lat">—</b></div>
+          <div class="kv"><span class="dim">Longitud</span><b id="lon">—</b></div>
+          <div class="kv"><span class="dim">UTC</span><b id="utc">—</b></div>
+        </div>
+
+        <div class="sec">
+          <div class="lbl">El Sol desaparece…</div>
+          <div id="obsc" class="none">—</div>
+          <div class="kv" style="margin-top:8px"><span class="dim">Sol oculto</span><b id="obscPct">—</b></div>
+          <div class="kv"><span class="dim">Separación</span><b id="sep">—</b></div>
+          <div class="kv"><span class="dim">Sol (alt · az)</span><b id="sunAltAz">—</b></div>
+          <div class="kv"><span class="dim">Luna (alt · az)</span><b id="moonAltAz">—</b></div>
+          <div class="kv"><span class="dim">Radio Sol / Luna</span><b id="radii">—</b></div>
+          <div class="kv"><span class="dim">Fase</span><b id="phase">—</b></div>
+        </div>
+
+        <div class="sec">
+          <div class="lbl">Cielo (acimut · altura)</div>
+          <div class="skyBox">
+            <div>
+              <div class="skyCap">Bóveda celeste</div>
+              <canvas id="sky" width="300" height="300"></canvas>
+            </div>
+            <div>
+              <div class="skyCap">Disco solar</div>
+              <canvas id="closeup" width="240" height="240"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="lbl">Terreno 3D</div>
+          <div class="row">
+            <button id="tilt" class="grow">Inclinar cámara</button>
+            <button id="resetView">Centrar</button>
+          </div>
+          <div class="row"><span class="dim">Exageración relieve</span><b id="exagLabel">1.0×</b></div>
+          <div class="row"><input id="exag" type="range" min="0" max="3" step="0.1" value="1" /></div>
+          <div class="row">
+            <select id="base" class="grow">
+              <option value="topo" selected>Topográfico</option>
+              <option value="osm">OpenStreetMap</option>
+              <option value="esri">Satélite (Esri)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="err" class="warn" style="margin-top:10px"></div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="viewer.js"></script>
+  </body>
+</html>
